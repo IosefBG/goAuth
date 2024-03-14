@@ -2,9 +2,8 @@ package main
 
 import (
 	"backendGoAuth/internal/auth"
-	"backendGoAuth/internal/config"
 	"backendGoAuth/internal/controllers"
-	"backendGoAuth/internal/database/postgres"
+	"backendGoAuth/internal/database"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -16,11 +15,8 @@ func main() {
 		fmt.Println("Error loading .env file")
 		return
 	}
-	// Load configuration
-	appConfig := config.LoadConfig()
-
 	// Connect to the database
-	db, err := postgres.ConnectDB(appConfig)
+	db, err := database.ConnectDB()
 	if err != nil {
 		fmt.Println("Error connecting to the database:", err)
 		return
@@ -34,7 +30,7 @@ func main() {
 	router := gin.Default()
 
 	// Set up routes using controllers
-	authController := controllers.NewAuthController(db, jwtMiddleware)
+	authController := controllers.NewAuthController()
 	router.POST("/login", authController.Login)
 	authGroup := router.Group("/auth")
 	authGroup.Use(jwtMiddleware.MiddlewareFunc())

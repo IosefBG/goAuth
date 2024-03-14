@@ -5,11 +5,18 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"net/http"
+	"os"
 	"time"
 )
 
 var (
 	errNoToken = errors.New("no token provided")
+)
+
+var (
+	jwtSecret      = os.Getenv("JWT_SECRET")
+	jwtDurationStr = os.Getenv("JWT_DURATION_HOURS")
+	jwtDuration, _ = time.ParseDuration(jwtDurationStr + "h")
 )
 
 type JWTMiddleware struct {
@@ -24,7 +31,7 @@ func SetupJWTMiddleware(secretKey string) *JWTMiddleware {
 
 func (jwtMiddleware *JWTMiddleware) MiddlewareFunc() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		token, err := extractToken(c)
+		token, err := ExtractToken(c)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 			c.Abort()
@@ -45,8 +52,8 @@ func (jwtMiddleware *JWTMiddleware) MiddlewareFunc() gin.HandlerFunc {
 	}
 }
 
-// extractToken extracts the JWT token from the request header.
-func extractToken(c *gin.Context) (string, error) {
+// ExtractToken extracts the JWT token from the request header.
+func ExtractToken(c *gin.Context) (string, error) {
 	tokenString := c.GetHeader("Authorization")
 	if tokenString == "" {
 		return "", errNoToken
@@ -56,11 +63,11 @@ func extractToken(c *gin.Context) (string, error) {
 }
 
 // GenerateJWT generates a new JWT token.
-func GenerateJWT(secretKey string, duration time.Duration, claims map[string]interface{}) (string, error) {
+func GenerateJWT(claims map[string]interface{}) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"exp": time.Now().Add(duration).Unix(),
+		"exp": time.Now().Add(jwtDuration).Unix(),
 	})
-	tokenString, err := token.SignedString([]byte(secretKey))
+	tokenString, err := token.SignedString([]byte(jwtSecret))
 	if err != nil {
 		return "", err
 	}
