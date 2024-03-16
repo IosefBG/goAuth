@@ -1,0 +1,54 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: goAuth
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: your_email@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  grafana:
+    image: grafana/grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: your_admin_username
+      GF_SECURITY_ADMIN_PASSWORD: your_admin_password
+
+  grafana-agent:
+    image: grafana/agent
+    restart: always
+    volumes:
+      - ./agent.yaml:/etc/agent/agent.yaml
+    environment:
+      GF_SECURITY_ADMIN_USER: your_admin_username
+      GF_SECURITY_ADMIN_PASSWORD: your_admin_password
+      GF_AUTH_ANONYMOUS_ENABLED: 'false' # Disable anonymous access
+      GF_AUTH_DISABLE_LOGIN_FORM: 'true' # Disable login form
+      GF_AUTH_BASIC_ENABLED: 'true' # Enable basic auth
+      GF_AUTH_BASIC_USERS: 'your_admin_username:your_admin_password' # Set basic auth credentials
+
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  grafana_data:
+  grafana-agent-data:
