@@ -1,0 +1,80 @@
+version: '3'
+
+services:
+  postgres:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: goAuth
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.0.2  # Static IP address for PostgreSQL container
+
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: your_email@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.0.3  # Static IP address for pgAdmin container
+
+  grafana:
+    image: grafana/grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: your_admin_username
+      GF_SECURITY_ADMIN_PASSWORD: your_admin_password
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.0.4  # Static IP address for Grafana container
+
+  prometheus:
+    image: prom/prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.prod.yaml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.0.5  # Static IP address for Prometheus container
+
+  go-auth:
+    image: localhost/go-auth:latest  # Use the image you built
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - "./prod.env:/goAuth/.env"
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.0.6  # Static IP address for Go application container
+
+networks:
+  goauth_network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/24  # Define a subnet for the network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  grafana_data:
+  prometheus_data:
