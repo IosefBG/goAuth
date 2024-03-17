@@ -5,12 +5,12 @@ import (
 	"backendGoAuth/internal/database"
 	"backendGoAuth/internal/metrics"
 	"backendGoAuth/internal/middlewares"
-	"database/sql"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
 	"log"
+	"os"
 )
 
 func main() {
@@ -20,18 +20,16 @@ func main() {
 	}
 
 	// Connect to the database
-	db, err := database.ConnectDB()
-	if err != nil {
+	if err := database.ConnectDB(); err != nil {
 		log.Println("Error connecting to the database:", err)
 		return
 	}
-	defer func(db *sql.DB) {
-		err := db.Close()
-		if err != nil {
-			log.Println("Error closing to the database:", err)
-			return
+
+	defer func() {
+		if err := database.GetDB().Close(); err != nil {
+			log.Println("Error closing the database connection:", err)
 		}
-	}(db)
+	}()
 
 	// Initialize JWT mddleware
 	jwtMiddleware := middlewares.SetupJWTMiddleware()
@@ -50,6 +48,7 @@ func main() {
 
 	// Define routes
 	router.POST("/login", authController.Login)
+	router.POST("/register", authController.Register)
 	authGroup := router.Group("/auth")
 	authGroup.Use(jwtMiddleware)
 	{
@@ -63,9 +62,9 @@ func main() {
 	router.Use(prometheusmetrics.InstrumentHandler())
 
 	// Start HTTP server
-	port := 8080
-	fmt.Printf("Server is running on port %d...\n", port)
-	if err := router.Run(fmt.Sprintf(":%d", port)); err != nil {
+	port := os.Getenv("PORT")
+	fmt.Printf("Server is running on port %s...\n", port)
+	if err := router.Run(":" + port); err != nil {
 		log.Println("Error starting the server:", err)
 	}
 }
