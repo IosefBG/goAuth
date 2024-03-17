@@ -2,8 +2,11 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/joho/godotenv"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -16,19 +19,42 @@ var (
 var (
 	jwtSecret      = os.Getenv("JWT_SECRET")
 	jwtDurationStr = os.Getenv("JWT_DURATION_HOURS")
-	jwtDuration, _ = time.ParseDuration(jwtDurationStr + "h")
+	jwtDuration    time.Duration
 )
 
+func init() {
+	// Load environment variables from .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file: %s", err)
+	}
+
+	jwtSecret = os.Getenv("JWT_SECRET")
+	jwtDurationStr = os.Getenv("JWT_DURATION_HOURS")
+
+	log.Printf("JWT_SECRET: %s", jwtSecret)
+	log.Printf("JWT_DURATION_HOURS: %s", jwtDurationStr)
+
+	jwtDuration, err = time.ParseDuration(jwtDurationStr + "h")
+	if err != nil {
+		log.Fatalf("Error parsing JWT duration: %s", err)
+	}
+	log.Printf("JWT duration: %s", jwtDuration)
+}
+
+// JWTMiddleware handles JWT token validation and extraction.
 type JWTMiddleware struct {
 	SigningKey []byte
 }
 
+// SetupJWTMiddleware initializes JWT middleware with the provided secret key.
 func SetupJWTMiddleware(secretKey string) *JWTMiddleware {
 	return &JWTMiddleware{
 		SigningKey: []byte(secretKey),
 	}
 }
 
+// MiddlewareFunc returns a Gin middleware function for JWT validation.
 func (jwtMiddleware *JWTMiddleware) MiddlewareFunc() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := ExtractToken(c)
@@ -62,15 +88,25 @@ func ExtractToken(c *gin.Context) (string, error) {
 	return tokenString, nil
 }
 
-// GenerateJWT generates a new JWT token.
-func GenerateJWT(claims map[string]interface{}) (string, error) {
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"exp": time.Now().Add(jwtDuration).Unix(),
-	})
+// GenerateJWT generates a new JWT token with the provided claims.
+func GenerateJWT(claims jwt.MapClaims) (string, error) {
+	log.Println("generate jwt", jwtDuration)
+	log.Println("generate jwt claims", claims)
+
+	// Set the expiration time for the token
+	claims["exp"] = time.Now().Add(jwtDuration).Unix()
+
+	// Create a new JWT token with the provided claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign the token with the secret key
 	tokenString, err := token.SignedString([]byte(jwtSecret))
 	if err != nil {
 		return "", err
 	}
+
+	log.Println("generate jwt tokenString", tokenString)
+
 	return tokenString, nil
 }
 
@@ -81,23 +117,41 @@ func validateToken(tokenString string, secretKey []byte) (jwt.MapClaims, error) 
 	})
 
 	if err != nil {
+		fmt.Println("Error validating token:", err) // Log the error for debugging
 		return nil, err
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok || !token.Valid {
-		return nil, errors.New("invalid token")
+	if !token.Valid {
+		return nil, errors.New("invalid token") // Token is invalid
 	}
 
-	return claims, nil
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, errors.New("invalid claims") // Claims are not of expected type
+	}
+
+	return claims, nil // Token is valid and claims are retrieved successfully
 }
 
-// GetUserIDFromContext retrieves the user ID from the Gin context.
-func GetUserIDFromContext(c *gin.Context) (int, error) {
-	userID, exists := c.Get("user_id")
-	if !exists {
-		return 0, errors.New("user ID not found in context")
+// GetUserIDFromTokenOrSource extracts the user ID from the JWT token.
+func GetUserIDFromTokenOrSource(c *gin.Context) (int, error) {
+	// Extract the JWT token from the request headers
+	tokenString, err := ExtractToken(c)
+	if err != nil {
+		return 0, err
 	}
 
-	return userID.(int), nil
+	// Validate the token and retrieve the claims
+	claims, err := validateToken(tokenString, []byte(jwtSecret))
+	if err != nil {
+		return 0, err
+	}
+
+	// Extract the user ID from the claims
+	userIDFloat64, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, errors.New("user ID not found in claims or not of the expected type")
+	}
+
+	return int(userIDFloat64), nil
 }

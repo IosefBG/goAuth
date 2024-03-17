@@ -4,115 +4,57 @@ package controllers
 
 import (
 	"backendGoAuth/internal/auth"
-	"backendGoAuth/internal/database"
-	"errors"
+	"backendGoAuth/internal/models"
+	"backendGoAuth/internal/services"
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
+	"log"
 	"net/http"
 )
 
 // AuthController handles authentication-related requests.
 type AuthController struct {
-	// Add any dependencies here
+	authService *services.AuthService
 }
 
-type RegistrationRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
+// NewAuthController creates a new instance of AuthController.
+func NewAuthController(authService *services.AuthService) *AuthController {
+	return &AuthController{authService: authService}
 }
 
 // Register handles the registration request.
 func (controller *AuthController) Register(c *gin.Context) {
-	// Parse the request body to extract the registration details
-	var req RegistrationRequest
+	var req models.RegistrationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	// Hash the password
-	hashedPassword, err := hashPassword(req.Password)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
-		return
-	}
-
-	// Implement logic to create a new user with the provided details
-	userID, err := createUser(req.Username, hashedPassword, req.Email)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
-		return
-	}
-
-	// Generate a JWT token for the newly registered user
-	token, err := auth.GenerateJWT(map[string]interface{}{"user_id": userID})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-		return
-	}
-
-	// Insert session into the database
 	ipAddress := c.ClientIP() // Get client IP address
-	err = database.InsertSession(userID, token, ipAddress)
+	token, err := controller.authService.RegisterUser(req, ipAddress)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"token": token})
 }
 
-func createUser(username, password, email string) (int, error) {
-	// Call InsertUser function from the database package
-	userID, err := database.InsertUser(username, password, email)
-	if err != nil {
-		return 0, err
-	}
-
-	return userID, nil
-}
-
-// NewAuthController creates a new instance of AuthController.
-func NewAuthController() *AuthController {
-	return &AuthController{}
-}
-
 // Login handles the login request.
 func (controller *AuthController) Login(c *gin.Context) {
-	// Parse the request body to extract the user's credentials
-	var req struct {
-		Username string `json:"username" binding:"required"`
-		Password string `json:"password" binding:"required"`
-	}
+	var req models.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
 		return
 	}
 
-	// Authenticate the user based on the provided credentials
-	userID, err := authenticateUser(req.Username, req.Password)
+	ipAddress := c.ClientIP() // Get client IP address
+	userID, token, err := controller.authService.AuthenticateUser(req.Username, req.Password, ipAddress)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	// Generate a JWT token with the user's ID
-	token, err := auth.GenerateJWT(map[string]interface{}{"user_id": userID})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal Server Error"})
-		return
-	}
-
-	// Insert session into the database
-	ipAddress := c.ClientIP() // Get client IP address
-	err = database.InsertSession(userID, token, ipAddress)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, gin.H{"userID": userID, "token": token})
 }
 
 // RevokeSession revokes a session for the current user.
@@ -125,7 +67,7 @@ func (controller *AuthController) RevokeSession(c *gin.Context) {
 	}
 
 	// Revoke the session token
-	err = revokeSessionToken(token)
+	err = controller.authService.RevokeSessionToken(token)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session token"})
 		return
@@ -134,32 +76,9 @@ func (controller *AuthController) RevokeSession(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Session revoked"})
 }
 
-// AuthenticateUser authenticates the user based on the provided credentials.
-func authenticateUser(username, password string) (int, error) {
-	// Retrieve user from database by username
-	user, err := database.GetUserByUsername(username)
-	if err != nil {
-		return 0, err
-	}
-
-	// Compare hashed passwords
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return 0, errors.New("authentication failed")
-	}
-
-	return user.ID, nil
-}
-
-// revokeSessionToken revokes a session token from the database.
-func revokeSessionToken(token string) error {
-	// Implement logic to revoke the session token from the database
-	// Example: db.Exec("DELETE FROM sessions WHERE token = ?", token)
-	return nil
-}
-
 func (controller *AuthController) SecureEndpoint(c *gin.Context) {
 	// Access user ID from the context
-	userID, err := auth.GetUserIDFromContext(c)
+	userID, err := auth.GetUserIDFromTokenOrSource(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -169,10 +88,24 @@ func (controller *AuthController) SecureEndpoint(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Secure Endpoint", "user_id": userID})
 }
 
-func hashPassword(password string) (string, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+// GetActiveSessions retrieves active sessions for a user.
+func (controller *AuthController) GetActiveSessions(c *gin.Context) {
+	// Extract the user ID from the context or request parameters
+	userID, err := auth.GetUserIDFromTokenOrSource(c)
 	if err != nil {
-		return "", err
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
-	return string(hashedPassword), nil
+
+	log.Printf("UserID from context: %v\n", userID)
+
+	// Retrieve active sessions for the user from the database
+	sessions, err := controller.authService.GetActiveSessions(userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve active sessions"})
+		return
+	}
+
+	// Return the active sessions as JSON response
+	c.JSON(http.StatusOK, sessions)
 }

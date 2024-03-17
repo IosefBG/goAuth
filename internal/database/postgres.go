@@ -4,44 +4,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
-	"os"
-	"time"
-
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"log"
+	"os"
 )
 
 var db *sql.DB
-
-// DBConfig holds the configuration for the database connection.
-type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
-}
-
-// Session represents a session in the database.
-type Session struct {
-	ID        int
-	UserID    int
-	Token     string
-	IPAddress string
-	Location  string
-	CreatedAt time.Time
-	IsValid   bool
-}
-
-type User struct {
-	ID       int
-	Username string
-	Password string
-	Email    string
-	// Add other fields as needed
-}
 
 // getDBConfigFromEnv retrieves the database configuration from environment variables.
 func getDBConfigFromEnv() DBConfig {
@@ -188,7 +158,13 @@ func GetActiveSessions(userID int) ([]Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			log.Printf("Error closing connection %v\n", err)
+			return
+		}
+	}(rows)
 
 	var sessions []Session
 	for rows.Next() {
@@ -208,9 +184,9 @@ func GetActiveSessions(userID int) ([]Session, error) {
 }
 
 // RevokeSession revokes a session in the database.
-func RevokeSession(sessionID int) error {
+func RevokeSession(sessionID string) error {
 	_, err := db.Exec(
-		"UPDATE user_sessions SET is_active = false WHERE id = $1",
+		"UPDATE user_sessions SET is_active = false WHERE session_token = $1",
 		sessionID,
 	)
 	if err != nil {

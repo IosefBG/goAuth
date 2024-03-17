@@ -5,6 +5,7 @@ import (
 	"backendGoAuth/internal/database"
 	"backendGoAuth/internal/metrics"
 	"backendGoAuth/internal/middlewares"
+	"backendGoAuth/internal/services"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -31,26 +32,42 @@ func main() {
 		}
 	}()
 
-	// Initialize JWT mddleware
-	jwtMiddleware := middlewares.SetupJWTMiddleware()
-
-	// Create Prometheus metrics registry
+	// Initialize Prometheus metrics registry
 	reg := prometheus.NewRegistry()
 
 	// Register Prometheus metrics
 	prometheusmetrics.RegisterMetrics(reg)
 
 	// Create Gin router
+	router := setupRouter()
+
+	// Start HTTP server
+	startServer(router)
+}
+
+// setupRouter initializes and configures the Gin router
+func setupRouter() *gin.Engine {
 	router := gin.Default()
 
-	// Initialize controllers
-	authController := controllers.NewAuthController()
+	// Apply middleware to track request duration
+	router.Use(prometheusmetrics.InstrumentHandler())
+
+	// Setup JWT middleware
+	router.Use(middlewares.SetupJWTMiddleware(os.Getenv("JWT_SECRET")))
+
+	// Instantiate AuthService
+	authService := services.NewAuthService()
+
+	// Instantiate AuthController with AuthService
+	authController := controllers.NewAuthController(authService)
 
 	// Define routes
 	router.POST("/login", authController.Login)
 	router.POST("/register", authController.Register)
+	router.POST("/logout", authController.RevokeSession)
+	router.GET("/activeSessions", authController.GetActiveSessions)
+
 	authGroup := router.Group("/auth")
-	authGroup.Use(jwtMiddleware)
 	{
 		authGroup.GET("/secure", authController.SecureEndpoint)
 	}
@@ -58,10 +75,11 @@ func main() {
 	// Register Prometheus metrics endpoint
 	router.GET("/metrics", prometheusmetrics.MetricsHandler())
 
-	// Apply middleware to track request duration
-	router.Use(prometheusmetrics.InstrumentHandler())
+	return router
+}
 
-	// Start HTTP server
+// startServer starts the HTTP server
+func startServer(router *gin.Engine) {
 	port := os.Getenv("PORT")
 	fmt.Printf("Server is running on port %s...\n", port)
 	if err := router.Run(":" + port); err != nil {
