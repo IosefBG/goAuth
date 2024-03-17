@@ -16,20 +16,6 @@ services:
       goauth_network:
         ipv4_address: 172.28.0.2  # Static IP address for PostgreSQL container
 
-  pgadmin:
-    image: dpage/pgadmin4
-    restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: your_email@example.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-    ports:
-      - "5050:80"
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    networks:
-      goauth_network:
-        ipv4_address: 172.28.0.3  # Static IP address for pgAdmin container
-
   grafana:
     image: grafana/grafana
     restart: always
@@ -40,7 +26,7 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: your_admin_password
     networks:
       goauth_network:
-        ipv4_address: 172.28.0.4  # Static IP address for Grafana container
+        ipv4_address: 172.28.1.2  # Static IP address for Grafana container
 
   prometheus:
     image: prom/prometheus
@@ -52,18 +38,47 @@ services:
       - prometheus_data:/prometheus
     networks:
       goauth_network:
-        ipv4_address: 172.28.0.5  # Static IP address for Prometheus container
+        ipv4_address: 172.28.1.1  # Static IP address for Prometheus container
 
   go-auth:
-    image: localhost/go-auth:latest  # Use the image you built
+    image: go-auth:latest  # Use the image you built
     restart: always
     ports:
-      - "8080:8080"
+      - "8000:8000"
     volumes:
       - "./prod.env:/goAuth/.env"
     networks:
       goauth_network:
         ipv4_address: 172.28.0.6  # Static IP address for Go application container
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.2
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /dev/disk/:/dev/disk:ro
+      - /etc/machine-id:/etc/machine-id:ro
+      - /sys:/sys:ro
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+      - /var/lib/containers:/var/lib/containers:ro
+      - /var/run:/var/run:rw
+      - /var/lib/dbus:/var/lib/dbus:ro   # Mount the entire /var/lib/dbus directory with read-only access
+    privileged: true
+    ports:
+      - "8080:8080"
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.1.3
+
+  node_exporter:
+    image: prom/node-exporter
+    restart: always
+    ports:
+      - "9100:9100"
+    networks:
+      goauth_network:
+        ipv4_address: 172.28.1.4
+    command: [ "--path.rootfs=/host" ]
 
 networks:
   goauth_network:
@@ -71,10 +86,9 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 172.28.0.0/24  # Define a subnet for the network
+        - subnet: 172.28.0.0/20  # Define a subnet for the network
 
 volumes:
   postgres_data:
-  pgadmin_data:
   grafana_data:
   prometheus_data:
