@@ -1,1 +1,1 @@
-* podman compose --file .\docker-compose.yaml --project-name goauth up --detach
+* start.sh

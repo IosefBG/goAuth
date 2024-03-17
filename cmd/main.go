@@ -1,17 +1,16 @@
 package main
 
 import (
-	"fmt"
-	"github.com/gin-gonic/gin"
-	"github.com/joho/godotenv"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"log"
-
 	"backendGoAuth/internal/controllers"
 	"backendGoAuth/internal/database"
 	"backendGoAuth/internal/metrics"
 	"backendGoAuth/internal/middlewares"
+	"database/sql"
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus"
+	"log"
 )
 
 func main() {
@@ -26,9 +25,15 @@ func main() {
 		log.Println("Error connecting to the database:", err)
 		return
 	}
-	defer db.Close()
+	defer func(db *sql.DB) {
+		err := db.Close()
+		if err != nil {
+			log.Println("Error closing to the database:", err)
+			return
+		}
+	}(db)
 
-	// Initialize JWT middleware
+	// Initialize JWT mddleware
 	jwtMiddleware := middlewares.SetupJWTMiddleware()
 
 	// Create Prometheus metrics registry
@@ -52,7 +57,10 @@ func main() {
 	}
 
 	// Register Prometheus metrics endpoint
-	router.GET("/metrics", gin.WrapH(promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg})))
+	router.GET("/metrics", prometheusmetrics.MetricsHandler())
+
+	// Apply middleware to track request duration
+	router.Use(prometheusmetrics.InstrumentHandler())
 
 	// Start HTTP server
 	port := 8080

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -20,28 +21,6 @@ type DBConfig struct {
 	Name     string
 }
 
-// ConnectDB connects to the PostgreSQL database and applies migrations.
-func ConnectDB() (*sql.DB, error) {
-	dbConfig := getDBConfigFromEnv()
-
-	// Open a connection to the database
-	db, err := openDB(dbConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	// Run database migrations
-	if err := runMigrations(dbConfig); err != nil {
-		// Close the database connection in case of an error during migrations
-		if closeErr := db.Close(); closeErr != nil {
-			return nil, closeErr
-		}
-		return nil, err
-	}
-
-	return db, nil
-}
-
 // getDBConfigFromEnv retrieves the database configuration from environment variables.
 func getDBConfigFromEnv() DBConfig {
 	return DBConfig{
@@ -53,13 +32,42 @@ func getDBConfigFromEnv() DBConfig {
 	}
 }
 
+// ConnectDB connects to the PostgreSQL database and applies migrations.
+func ConnectDB() (*sql.DB, error) {
+	dbConfig := getDBConfigFromEnv()
+
+	// Open a connection to the database
+	db, err := openDB(dbConfig)
+	if err != nil {
+		log.Printf("Error connecting to the database: %v\n", err)
+		return nil, err
+	}
+
+	// Run database migrations
+	if err := runMigrations(dbConfig); err != nil {
+		log.Printf("Error applying database migrations: %v\n", err)
+		if closeErr := db.Close(); closeErr != nil {
+			log.Printf("Error closing database connection: %v\n", closeErr)
+		}
+		return nil, err
+	}
+
+	log.Println("Database connection and migrations applied successfully")
+	return db, nil
+}
+
 // openDB opens a connection to the PostgreSQL database.
 func openDB(cfg DBConfig) (*sql.DB, error) {
 	connectionString := fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=disable",
 		cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.Name,
 	)
-	return sql.Open("postgres", connectionString)
+	db, err := sql.Open("postgres", connectionString)
+	if err != nil {
+		log.Printf("Error opening database connection: %v\n", err)
+		return nil, err
+	}
+	return db, nil
 }
 
 // runMigrations runs database migrations using the "migrate" library.
@@ -73,15 +81,18 @@ func runMigrations(cfg DBConfig) error {
 		fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Name),
 	)
 	if err != nil {
+		log.Printf("Error initializing migration tool: %v\n", err)
 		return err
 	}
 
 	// Apply all pending migrations
 	if err := m.Up(); err != nil {
 		if !errors.Is(err, migrate.ErrNoChange) {
+			log.Printf("Error applying migrations: %v\n", err)
 			return err
 		}
 	}
 
+	log.Println("Migrations applied successfully")
 	return nil
 }
