@@ -21,11 +21,11 @@ execute_command() {
 }
 
 # Build the Docker image
-execute_command "podman build -t go-auth ./" "Docker image build"
+execute_command "docker build -t go-auth ./" "Docker image build"
 
 # Check if the Docker image has been built
 while true; do
-    if podman images | grep -q "go-auth"; then
+    if docker images | grep -q "go-auth"; then
         echo "Docker image build completed."
         break
     else
@@ -35,7 +35,7 @@ while true; do
 done
 
 # Run Docker Compose
-execute_command "podman compose --file .\docker-compose.yaml --project-name goauth up --detach" "Docker Compose"
+execute_command "docker compose --file .\docker-compose.yaml --project-name goauth up --detach" "Docker Compose"
 
 # Wait for the user to press any key if debug mode is disabled
 
