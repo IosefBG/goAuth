@@ -20,6 +20,9 @@ execute_command() {
     echo "Finished executing $command_name."
 }
 
+# Stop and remove all containers and volumes
+execute_command "docker-compose down --volumes" "Remove existing containers and volumes"
+
 # Build the Docker image
 execute_command "docker build -t go-auth ./" "Docker image build"
 

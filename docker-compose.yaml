@@ -12,18 +12,20 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./internal/config/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql
     networks:
       goauth_network:
         ipv4_address: 172.28.0.2  # Static IP address for PostgreSQL container
 
   grafana:
     image: grafana/grafana
-    restart: always
     ports:
       - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_USER: your_admin_username
-      GF_SECURITY_ADMIN_PASSWORD: your_admin_password
+    env_file:
+      - ./internal/config/grafana/config.monitoring
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./internal/config/grafana/provisioning:/etc/grafana/provisioning
     networks:
       goauth_network:
         ipv4_address: 172.28.1.2  # Static IP address for Grafana container

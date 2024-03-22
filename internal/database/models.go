@@ -15,9 +15,8 @@ type Session struct {
 	UserID    int
 	Token     string
 	IPAddress string
-	Location  string
 	CreatedAt time.Time
-	IsValid   bool
+	IsActive  bool
 }
 
 type User struct {

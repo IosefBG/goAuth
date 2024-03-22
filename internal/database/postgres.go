@@ -125,8 +125,7 @@ func InsertUser(username, password, email string) (int, error) {
 
 func GetUserByUsername(username string) (*User, error) {
 	var user User
-	err := db.QueryRow("SELECT id, username, password, email FROM users WHERE username = $1", username).
-		Scan(&user.ID, &user.Username, &user.Password, &user.Email)
+	err := db.QueryRow("SELECT id, username, password, email FROM users WHERE username = $1", username).Scan(&user.ID, &user.Username, &user.Password, &user.Email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
@@ -171,7 +170,7 @@ func GetActiveSessions(userID int) ([]Session, error) {
 		var session Session
 		if err := rows.Scan(
 			&session.ID, &session.UserID, &session.Token, &session.IPAddress,
-			&session.Location, &session.CreatedAt, &session.IsValid,
+			&session.IsActive, &session.CreatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -193,4 +192,17 @@ func RevokeSession(sessionID string) error {
 		return err
 	}
 	return nil
+}
+
+func CheckSession(tokenString string) (bool, error) {
+	var session Session
+	err := db.QueryRow("SELECT is_active FROM user_sessions WHERE session_token = $1 AND is_active = true", tokenString).Scan(&session.IsActive)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		log.Printf("Error retrieving session: %v\n", err)
+		return false, err
+	}
+	return session.IsActive, nil
 }

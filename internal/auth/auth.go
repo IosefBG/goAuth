@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"backendGoAuth/internal/database"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -90,9 +91,6 @@ func ExtractToken(c *gin.Context) (string, error) {
 
 // GenerateJWT generates a new JWT token with the provided claims.
 func GenerateJWT(claims jwt.MapClaims) (string, error) {
-	log.Println("generate jwt", jwtDuration)
-	log.Println("generate jwt claims", claims)
-
 	// Set the expiration time for the token
 	claims["exp"] = time.Now().Add(jwtDuration).Unix()
 
@@ -104,8 +102,6 @@ func GenerateJWT(claims jwt.MapClaims) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	log.Println("generate jwt tokenString", tokenString)
 
 	return tokenString, nil
 }
@@ -139,6 +135,14 @@ func GetUserIDFromTokenOrSource(c *gin.Context) (int, error) {
 	tokenString, err := ExtractToken(c)
 	if err != nil {
 		return 0, err
+	}
+
+	sessionValid, err := database.CheckSession(tokenString)
+	if err != nil {
+		return 0, err
+	}
+	if !sessionValid {
+		return 0, errors.New("session is invalid or expired")
 	}
 
 	// Validate the token and retrieve the claims

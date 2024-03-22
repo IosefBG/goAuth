@@ -1,0 +1,5 @@
+PROMETHEUS_URL=http://172.28.1.1:9090
+GF_SECURITY_ADMIN_USER=your_admin_username
+GF_SECURITY_ADMIN_PASSWORD=your_admin_password
+GF_USERS_ALLOW_SIGN_UP=false
+DS_PROMETHEUS=Prometheus
