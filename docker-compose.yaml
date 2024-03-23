@@ -42,16 +42,16 @@ services:
       goauth_network:
         ipv4_address: 172.28.1.1  # Static IP address for Prometheus container
 
-  go-auth:
-    image: go-auth:latest  # Use the image you built
-    restart: always
-    ports:
-      - "8000:8000"
-    volumes:
-      - "./prod.env:/goAuth/.env"
-    networks:
-      goauth_network:
-        ipv4_address: 172.28.0.6  # Static IP address for Go application container
+#  go-auth:
+#    image: go-auth:latest  # Use the image you built
+#    restart: always
+#    ports:
+#      - "8000:8000"
+#    volumes:
+#      - "./prod.env:/goAuth/.env"
+#    networks:
+#      goauth_network:
+#        ipv4_address: 172.28.0.6  # Static IP address for Go application container
 
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.47.2

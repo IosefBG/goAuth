@@ -41,7 +41,7 @@ func registerHDMetrics(reg prometheus.Registerer) {
 	hdFailures := prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "hd_errors_total",
-			Help: "Number of hard-disk errors.",
+			Help: "Number of hard-disk goAuthException.",
 		},
 		[]string{"device"},
 	)

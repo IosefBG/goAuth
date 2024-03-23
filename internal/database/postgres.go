@@ -9,6 +9,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"log"
 	"os"
+	"time"
 )
 
 var db *sql.DB
@@ -123,24 +124,26 @@ func InsertUser(username, password, email string) (int, error) {
 	return userID, nil
 }
 
-func GetUserByUsername(username string) (*User, error) {
-	var user User
-	err := db.QueryRow("SELECT id, username, password, email FROM users WHERE username = $1", username).Scan(&user.ID, &user.Username, &user.Password, &user.Email)
+func UserExistsByUsername(username string) (bool, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE username = $1", username).Scan(&count)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil
-		}
-		log.Printf("Error retrieving user by username: %v\n", err)
-		return nil, err
+		log.Printf("Error checking if user exists by username: %v\n", err)
+		return false, err
 	}
-	return &user, nil
+	return count > 0, nil
 }
 
 // InsertSession inserts a new session into the database.
 func InsertSession(userID int, token, ipAddress string) error {
-	_, err := db.Exec(
-		"INSERT INTO user_sessions (user_id, session_token, ip_address) VALUES ($1, $2, $3)",
-		userID, token, ipAddress,
+	now := time.Now()
+	location, err := getLocationFromIPAddress(ipAddress)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		"INSERT INTO user_sessions (user_id, session_token, ip_address, location, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)",
+		userID, token, ipAddress, location, now, now,
 	)
 	if err != nil {
 		return err
@@ -148,10 +151,17 @@ func InsertSession(userID int, token, ipAddress string) error {
 	return nil
 }
 
+func getLocationFromIPAddress(ipAddress string) (string, error) {
+	// Implement logic to obtain location information from the IP address.
+	// This might involve using a geoip library or calling an external service.
+	// Here's a simplified example using a placeholder value:
+	return "New York, USA", nil
+}
+
 // GetActiveSessions retrieves active sessions for a user from the database.
 func GetActiveSessions(userID int) ([]Session, error) {
 	rows, err := db.Query(
-		"SELECT * FROM user_sessions WHERE user_id = $1 AND is_active = true",
+		"SELECT id, ip_address, created_at, updated_at, location FROM user_sessions WHERE user_id = $1 AND is_active = true",
 		userID,
 	)
 	if err != nil {
@@ -161,7 +171,6 @@ func GetActiveSessions(userID int) ([]Session, error) {
 		err := rows.Close()
 		if err != nil {
 			log.Printf("Error closing connection %v\n", err)
-			return
 		}
 	}(rows)
 
@@ -169,8 +178,7 @@ func GetActiveSessions(userID int) ([]Session, error) {
 	for rows.Next() {
 		var session Session
 		if err := rows.Scan(
-			&session.ID, &session.UserID, &session.Token, &session.IPAddress,
-			&session.IsActive, &session.CreatedAt,
+			&session.ID, &session.IPAddress, &session.CreatedAt, &session.UpdatedAt, &session.Location,
 		); err != nil {
 			return nil, err
 		}
@@ -205,4 +213,52 @@ func CheckSession(tokenString string) (bool, error) {
 		return false, err
 	}
 	return session.IsActive, nil
+}
+
+func UserExistsByEmail(email string) (bool, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM users WHERE email = $1", email).Scan(&count)
+	if err != nil {
+		log.Printf("Error checking if user exists by email: %v\n", err)
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func UpdateSessionUpdatedAt(userID int) error {
+	// Get current time
+	currentTime := time.Now()
+
+	// Perform update query to update the updated_at column
+	_, err := db.Exec(
+		"UPDATE user_sessions SET updated_at = $1 WHERE user_id = $2",
+		currentTime, userID,
+	)
+	return err
+}
+
+func GetUserByEmail(identifier string) (*User, error) {
+	var user User
+	err := db.QueryRow("SELECT id, username, password, email FROM users WHERE email = $1", identifier).Scan(&user.ID, &user.Username, &user.Password, &user.Email)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		log.Printf("Error retrieving user by username: %v\n", err)
+		return nil, err
+	}
+	return &user, nil
+}
+
+func GetUserByUsername(username string) (*User, error) {
+	var user User
+	err := db.QueryRow("SELECT username FROM users WHERE username = $1", username).Scan(&user.Username)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		log.Printf("Error retrieving user by username: %v\n", err)
+		return nil, err
+	}
+	return &user, nil
 }

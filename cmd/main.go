@@ -7,6 +7,7 @@ import (
 	"backendGoAuth/internal/middlewares"
 	"backendGoAuth/internal/services"
 	"fmt"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus"
@@ -49,6 +50,15 @@ func main() {
 func setupRouter() *gin.Engine {
 	router := gin.Default()
 
+	config := cors.DefaultConfig()
+	config.AllowAllOrigins = true
+	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"} // Include Authorization header
+	// Enable CORS for all origins, methods, and headers
+	router.Use(cors.New(config))
+
+	//router.Use(middlewares.UpdateSessionMiddleware())
+
 	// Apply middleware to track request duration
 	router.Use(prometheusmetrics.InstrumentHandler())
 
@@ -62,14 +72,17 @@ func setupRouter() *gin.Engine {
 	authController := controllers.NewAuthController(authService)
 
 	// Define routes
-	router.POST("/login", authController.Login)
-	router.POST("/register", authController.Register)
-	router.POST("/logout", authController.RevokeSession)
-	router.GET("/activeSessions", authController.GetActiveSessions)
-
-	authGroup := router.Group("/auth")
+	api := router.Group("/api")
 	{
-		authGroup.GET("/secure", authController.SecureEndpoint)
+		api.POST("/login", authController.Login)
+		api.POST("/register", authController.Register)
+		api.POST("/logout", middlewares.UpdateSessionMiddleware(), authController.RevokeSession)
+		api.GET("/activeSessions", middlewares.UpdateSessionMiddleware(), authController.GetActiveSessions)
+
+		authGroup := api.Group("/auth", middlewares.UpdateSessionMiddleware())
+		{
+			authGroup.GET("/secure", authController.SecureEndpoint)
+		}
 	}
 
 	// Register Prometheus metrics endpoint

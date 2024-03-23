@@ -29,14 +29,14 @@ func (controller *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	ipAddress := c.ClientIP() // Get client IP address
-	token, err := controller.authService.RegisterUser(req, ipAddress)
+	ipAddress := c.ClientIP()
+	authResponse, err := controller.authService.RegisterUser(req, ipAddress)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, authResponse)
 }
 
 // Login handles the login request.
@@ -48,13 +48,13 @@ func (controller *AuthController) Login(c *gin.Context) {
 	}
 
 	ipAddress := c.ClientIP() // Get client IP address
-	userID, token, err := controller.authService.AuthenticateUser(req.Username, req.Password, ipAddress)
+	authResponse, err := controller.authService.AuthenticateUser(req.Identifier, req.Password, ipAddress)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"userID": userID, "token": token})
+	c.JSON(http.StatusOK, authResponse)
 }
 
 // RevokeSession revokes a session for the current user.

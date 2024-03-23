@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -84,6 +85,12 @@ func ExtractToken(c *gin.Context) (string, error) {
 	tokenString := c.GetHeader("Authorization")
 	if tokenString == "" {
 		return "", errNoToken
+	}
+
+	const bearerPrefix = "Bearer "
+	if strings.HasPrefix(tokenString, bearerPrefix) {
+		// Remove the 'Bearer ' prefix
+		tokenString = tokenString[len(bearerPrefix):]
 	}
 
 	return tokenString, nil
