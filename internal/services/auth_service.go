@@ -6,21 +6,25 @@ import (
 	"backendGoAuth/internal/goAuthException"
 	"backendGoAuth/internal/models"
 	"golang.org/x/crypto/bcrypt"
+	"log"
 	"strings"
 )
 
 // AuthService provides authentication-related services.
 type AuthService struct {
+	SessionService *SessionService // Corrected reference
 	// Add any dependencies here
 }
 
 // NewAuthService creates a new instance of AuthService.
-func NewAuthService() *AuthService {
-	return &AuthService{}
+func NewAuthService(sessionService *SessionService) *AuthService {
+	return &AuthService{
+		SessionService: sessionService,
+	}
 }
 
 // RegisterUser registers a new user with the provided details.
-func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress string) (models.AuthResponse, error) {
+func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, browser, device string) (models.AuthResponse, error) {
 	// Check if username already exists
 	exists, err := database.UserExistsByUsername(req.Username)
 	if err != nil {
@@ -58,7 +62,7 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress s
 	}
 
 	// Insert session into the database
-	err = database.InsertSession(user.ID, token, ipAddress)
+	err = svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.SessionInsertionError)
 	}
@@ -71,22 +75,31 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress s
 
 // AuthenticateUser authenticates a user based on the provided credentials.
 // AuthenticateUser authenticates a user based on the provided identifier (username or email) and password.
-func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress string) (models.AuthResponse, error) {
+func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browser, device string) (models.AuthResponse, error) {
 	var user *database.User
 	var err error
 
 	if strings.Contains(identifier, "@") {
 		user, err = database.GetUserByEmail(identifier)
+		if err != nil {
+			return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.NotFoundCode, goAuthException.UsernameCheckError)
+		}
 	} else {
 		user, err = database.GetUserByUsername(identifier)
+		if err != nil {
+			return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.NotFoundCode, goAuthException.EmailCheckError)
+		}
 	}
-	if err != nil {
-		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.NotFoundCode, goAuthException.UsernameCheckError)
+
+	if user == nil {
+		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.NotFoundCode, "User doesn't exist")
 	}
 
 	// Compare hashed passwords
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.UnauthorizedCode, "Authentication failed")
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		log.Printf("Password comparison failed for user: %s\n", identifier)
+		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.UnauthorizedCode, "Invalid credentials")
 	}
 
 	// Generate a JWT token with the user's ID
@@ -96,7 +109,7 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress string)
 	}
 
 	// Insert session into the database
-	err = database.InsertSession(user.ID, token, ipAddress)
+	err = svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.InternalServerErrorCode, goAuthException.SessionInsertionError)
 	}
@@ -113,13 +126,9 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress string)
 	return authResponse, nil
 }
 
-func (svc *AuthService) GetActiveSessions(userID int) ([]database.Session, error) {
-	return database.GetActiveSessions(userID)
-}
-
-func (svc *AuthService) RevokeSessionToken(token string) error {
-	return database.RevokeSession(token)
-}
+//func (svc *AuthService) GetActiveSessions(userID int) ([]database.Session, error) {
+//	return database.GetActiveSessions(userID)
+//}
 
 // createUser creates a new user in the database.
 func (svc *AuthService) createUser(username, password, email string) (models.UserData, error) {
@@ -141,4 +150,14 @@ func hashPassword(password string) (string, error) {
 		return "", goAuthException.NewCustomError(goAuthException.InternalServerErrorCode, goAuthException.SessionInsertionError)
 	}
 	return string(hashedPassword), nil
+}
+
+func (svc *AuthService) RevokeSession(sessionID int) error {
+	// Call the relevant method to revoke the session in your service layer
+	err := svc.SessionService.RevokeSession(sessionID)
+	if err != nil {
+		// Handle any errors that occur during session revocation
+		return err
+	}
+	return nil
 }

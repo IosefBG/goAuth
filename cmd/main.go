@@ -53,7 +53,7 @@ func setupRouter() *gin.Engine {
 	config := cors.DefaultConfig()
 	config.AllowAllOrigins = true
 	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization"} // Include Authorization header
+	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Browser", "X-Device"} // Include Authorization header
 	// Enable CORS for all origins, methods, and headers
 	router.Use(cors.New(config))
 
@@ -66,17 +66,19 @@ func setupRouter() *gin.Engine {
 	router.Use(middlewares.SetupJWTMiddleware(os.Getenv("JWT_SECRET")))
 
 	// Instantiate AuthService
-	authService := services.NewAuthService()
+	sessionService := services.NewSessionService()
+	authService := services.NewAuthService(sessionService)
 
 	// Instantiate AuthController with AuthService
-	authController := controllers.NewAuthController(authService)
+	authController := controllers.NewAuthController(authService, sessionService)
 
 	// Define routes
 	api := router.Group("/api")
 	{
 		api.POST("/login", authController.Login)
 		api.POST("/register", authController.Register)
-		api.POST("/logout", middlewares.UpdateSessionMiddleware(), authController.RevokeSession)
+		api.POST("/logout", middlewares.UpdateSessionMiddleware(), authController.RevokeCurrentSession)
+		api.POST("/revokeSession", middlewares.UpdateSessionMiddleware(), authController.RevokeSession)
 		api.GET("/activeSessions", middlewares.UpdateSessionMiddleware(), authController.GetActiveSessions)
 
 		authGroup := api.Group("/auth", middlewares.UpdateSessionMiddleware())
