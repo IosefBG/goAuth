@@ -135,15 +135,16 @@ func UserExistsByUsername(username string) (bool, error) {
 }
 
 // InsertSession inserts a new session into the database.
-func InsertSession(session Session) error {
-	_, err := db.Exec(
-		"INSERT INTO user_sessions (user_id, session_token, ip_address, location, created_at, updated_at, device_connected, browser_used) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+func InsertSession(session Session) (int, error) {
+	var sessionID int
+	err := db.QueryRow(
+		"INSERT INTO user_sessions (user_id, session_token, ip_address, location, created_at, updated_at, device_connected, browser_used) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
 		session.UserID, session.Token, session.IPAddress, session.Location, session.CreatedAt, session.UpdatedAt, session.DeviceConnected, session.BrowserUsed,
-	)
+	).Scan(&sessionID)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return sessionID, nil
 }
 
 //func getLocationFromIPAddress(ipAddress string) (string, error) {

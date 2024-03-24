@@ -20,8 +20,9 @@ type UserData struct {
 }
 
 type AuthResponse struct {
-	Token string   `json:"token"`
-	User  UserData `json:"user"`
+	Token   string          `json:"token"`
+	User    UserData        `json:"user"`
+	Session SessionResponse `json:"session"`
 }
 
 type SessionResponse struct {

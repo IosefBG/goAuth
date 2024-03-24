@@ -62,7 +62,7 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, 
 	}
 
 	// Insert session into the database
-	err = svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
+	sessionID, err := svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.SessionInsertionError)
 	}
@@ -70,6 +70,9 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, 
 	return models.AuthResponse{
 		Token: token,
 		User:  user,
+		Session: models.SessionResponse{
+			ID: sessionID,
+		},
 	}, nil
 }
 
@@ -109,7 +112,7 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browse
 	}
 
 	// Insert session into the database
-	err = svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
+	sessionID, err := svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.InternalServerErrorCode, goAuthException.SessionInsertionError)
 	}
@@ -120,6 +123,9 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browse
 			ID:       user.ID,
 			Username: user.Username,
 			Email:    user.Email,
+		},
+		Session: models.SessionResponse{
+			ID: sessionID,
 		},
 	}
 

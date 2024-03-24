@@ -19,16 +19,14 @@ func NewSessionService() *SessionService {
 
 // getLocationFromIPAddress gets the location from the IP address
 func getLocationFromIPAddress(ipAddress string) (string, error) {
-	// Your implementation to get the location from the IP address
 	return "Location", nil // Placeholder
 }
 
-// InsertSession inserts a new session into the database
-func (s *SessionService) InsertSession(userID int, token, ipAddress, browser, device string) error {
+func (s *SessionService) InsertSession(userID int, token, ipAddress, browser, device string) (int, error) {
 	now := time.Now()
 	location, err := getLocationFromIPAddress(ipAddress)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	session := database.Session{
@@ -42,11 +40,11 @@ func (s *SessionService) InsertSession(userID int, token, ipAddress, browser, de
 		BrowserUsed:     browser,
 	}
 
-	err = database.InsertSession(session)
+	sessionID, err := database.InsertSession(session)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return nil
+	return sessionID, nil
 }
 
 func (s *SessionService) GetActiveSessions(userID int) ([]models.SessionResponse, error) {

@@ -9,7 +9,7 @@ type AuthServiceInterface interface {
 }
 
 type SessionServiceInterface interface {
-	InsertSession(userID int, token, ipAddress, browser, device string) error
+	InsertSession(userID int, token, ipAddress, browser, device string) (int, error)
 	GetActiveSessions(userID int) ([]models.SessionResponse, error)
 	RevokeCurrentSessionToken(token string) error
 }
