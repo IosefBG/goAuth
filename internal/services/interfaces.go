@@ -10,6 +10,6 @@ type AuthServiceInterface interface {
 
 type SessionServiceInterface interface {
 	InsertSession(userID int, token, ipAddress, browser, device string) error
-	GetActiveSessions(userID int) ([]models.SessionResponse, error) //todo change from database to models
+	GetActiveSessions(userID int) ([]models.SessionResponse, error)
 	RevokeCurrentSessionToken(token string) error
 }
