@@ -51,7 +51,7 @@ func (controller *AuthController) Register(c *gin.Context) {
 	ipAddress := c.ClientIP()
 	authResponse, err := controller.authService.RegisterUser(req, ipAddress, browser, device)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register user", "message": err.Error()})
 		return
 	}
 
@@ -74,7 +74,7 @@ func (controller *AuthController) Login(c *gin.Context) {
 	ipAddress := c.ClientIP() // Get client IP address
 	authResponse, err := controller.authService.AuthenticateUser(req.Identifier, req.Password, ipAddress, browser, device)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials", "message": err.Error()})
 		return
 	}
 
