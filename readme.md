@@ -5,3 +5,7 @@
 
 TODO:
 * add prometheus user for postgres for select only; maybe a bat script later
+
+
+database diagram made with dbeaver
+![img.png](img.png)

@@ -198,6 +198,15 @@ func GetActiveSessionsQuery(userID int) (*sql.Rows, error) {
 	return rows, nil
 }
 
+//func GetUserRole(userID int) (string, error) {
+//	rows, err := db.Query(
+//		"SELECT role FROM user_roles WHERE user_id = $1 AND is_active = true", userID)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return rows, nil
+//}
+
 // RevokeCurrentSession revokes a session in the database.
 func RevokeCurrentSession(sessionID string) error {
 	_, err := db.Exec(
