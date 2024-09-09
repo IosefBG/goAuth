@@ -1,10 +1,13 @@
+// main.go
+
 package main
 
 import (
 	"backendGoAuth/internal/controllers"
 	"backendGoAuth/internal/database"
-	"backendGoAuth/internal/metrics"
+	prometheusmetrics "backendGoAuth/internal/metrics"
 	"backendGoAuth/internal/middlewares"
+	"backendGoAuth/internal/repositories"
 	"backendGoAuth/internal/services"
 	"fmt"
 	"github.com/gin-contrib/cors"
@@ -57,33 +60,45 @@ func setupRouter() *gin.Engine {
 	// Enable CORS for all origins, methods, and headers
 	router.Use(cors.New(config))
 
-	//router.Use(middlewares.UpdateSessionMiddleware())
-
 	// Apply middleware to track request duration
 	router.Use(prometheusmetrics.InstrumentHandler())
 
 	// Setup JWT middleware
 	router.Use(middlewares.SetupJWTMiddleware(os.Getenv("JWT_SECRET")))
 
+	// Get the database instance
+	db := database.GetDB()
+
 	// Instantiate AuthService
-	sessionService := services.NewSessionService()
-	authService := services.NewAuthService(sessionService)
+	sessionRepo := repositories.NewSessionRepository(db) // Corrected to use pointer
+	sessionService := services.NewSessionService(sessionRepo)
+	userRepo := repositories.NewUserRepository(db) // Initialize UserRepo
+	authService := services.NewAuthService(userRepo, sessionService)
+
+	// Instantiate middleware with session service
+	sessionMiddleware := middlewares.NewSessionMiddleware(sessionService)
 
 	// Instantiate AuthController with AuthService
 	authController := controllers.NewAuthController(authService, sessionService)
+	adminController := controllers.NewAdminController(userRepo)
 
 	// Define routes
 	api := router.Group("/api")
 	{
 		api.POST("/login", authController.Login)
 		api.POST("/register", authController.Register)
-		api.POST("/logout", middlewares.UpdateSessionMiddleware(), authController.RevokeCurrentSession)
-		api.POST("/revokeSession", middlewares.UpdateSessionMiddleware(), authController.RevokeSession)
-		api.GET("/activeSessions", middlewares.UpdateSessionMiddleware(), authController.GetActiveSessions)
 
-		authGroup := api.Group("/auth", middlewares.UpdateSessionMiddleware())
+		authGroup := api.Group("/auth", sessionMiddleware.UpdateSessionMiddleware())
 		{
+			authGroup.POST("/logout", authController.RevokeCurrentSession)
+			authGroup.POST("/revokeSession", authController.RevokeSession)
+			authGroup.GET("/activeSessions", authController.GetActiveSessions)
 			authGroup.GET("/secure", authController.SecureEndpoint)
+		}
+
+		adminGroup := api.Group("/admin", sessionMiddleware.UpdateSessionMiddleware())
+		{
+			adminGroup.GET("/users", adminController.GetAllUsers)
 		}
 	}
 
