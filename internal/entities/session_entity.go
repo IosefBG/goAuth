@@ -1,21 +1,6 @@
-package database
+package entities
 
 import "time"
-
-type DBConfig struct {
-	Host     string
-	Port     string
-	User     string
-	Password string
-	Name     string
-}
-
-type User struct {
-	ID       int
-	Username string
-	Password string
-	Email    string
-}
 
 type Session struct {
 	ID              int       `json:"id"`

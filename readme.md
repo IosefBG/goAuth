@@ -5,3 +5,9 @@
 
 TODO:
 * add prometheus user for postgres for select only; maybe a bat script later
+
+
+database diagram made with dbeaver
+![img.png](img.png)
+
+role-based access control (RBAC) system

@@ -1,11 +1,9 @@
-// In your controllers/auth_controller.go
-
 package controllers
 
 import (
-	"backendGoAuth/internal/auth"
 	"backendGoAuth/internal/models"
 	"backendGoAuth/internal/services"
+	"backendGoAuth/internal/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/mssola/user_agent"
 	"log"
@@ -13,28 +11,17 @@ import (
 )
 
 type AuthController struct {
-	authService    services.AuthServiceInterface
-	sessionService services.SessionServiceInterface
+	authService    *services.AuthService
+	sessionService *services.SessionService
 }
 
 // NewAuthController creates a new instance of AuthController.
-func NewAuthController(authService services.AuthServiceInterface, sessionService services.SessionServiceInterface) *AuthController {
+func NewAuthController(authService *services.AuthService, sessionService *services.SessionService) *AuthController {
 	return &AuthController{
 		authService:    authService,
 		sessionService: sessionService,
 	}
 }
-
-// AuthController handles authentication-related requests.
-//type AuthController struct {
-//	authService    *services.AuthService
-//	sessionService *services.Session
-//}
-//
-//// NewAuthController creates a new instance of AuthController.
-//func NewAuthController(authService *services.AuthService) *AuthController {
-//	return &AuthController{authService: authService}
-//}
 
 // Register handles the registration request.
 func (controller *AuthController) Register(c *gin.Context) {
@@ -71,7 +58,7 @@ func (controller *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	ipAddress := c.ClientIP() // Get client IP address
+	ipAddress := c.ClientIP()
 	authResponse, err := controller.authService.AuthenticateUser(req.Identifier, req.Password, ipAddress, browser, device)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials", "message": err.Error()})
@@ -84,14 +71,14 @@ func (controller *AuthController) Login(c *gin.Context) {
 // RevokeCurrentSession revokes a session for the current user.
 func (controller *AuthController) RevokeCurrentSession(c *gin.Context) {
 	// Extract the session token from the request
-	token, err := auth.ExtractToken(c)
+	token, err := utils.ExtractToken(c)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid token"})
 		return
 	}
 
 	// Revoke the session token
-	err = controller.sessionService.RevokeCurrentSessionToken(token)
+	err = controller.sessionService.RevokeSession(token) // Assuming token is session ID
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session token"})
 		return
@@ -102,7 +89,7 @@ func (controller *AuthController) RevokeCurrentSession(c *gin.Context) {
 
 func (controller *AuthController) SecureEndpoint(c *gin.Context) {
 	// Access user ID from the context
-	userID, err := auth.GetUserIDFromTokenOrSource(c)
+	userID, err := controller.sessionService.GetUserIDFromTokenOrSource(c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
 		return
@@ -115,7 +102,7 @@ func (controller *AuthController) SecureEndpoint(c *gin.Context) {
 // GetActiveSessions retrieves active sessions for a user.
 func (controller *AuthController) GetActiveSessions(c *gin.Context) {
 	// Extract the user ID from the context or request parameters
-	userID, err := auth.GetUserIDFromTokenOrSource(c)
+	userID, err := controller.sessionService.GetUserIDFromTokenOrSource(c)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -126,32 +113,30 @@ func (controller *AuthController) GetActiveSessions(c *gin.Context) {
 	// Retrieve active sessions for the user from the database
 	sessions, err := controller.sessionService.GetActiveSessions(userID)
 	if err != nil {
-		// Log the error
 		log.Printf("Error retrieving active sessions: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to retrieve active sessions"})
 		return
 	}
 
-	// Return the active sessions as JSON response
 	c.JSON(http.StatusOK, sessions)
 }
 
-func (controller *AuthController) RevokeSession(c *gin.Context) {
-	// Extract the session ID from the request body
-	var req struct {
-		SessionID int `json:"session_id"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+func (ac *AuthController) RevokeSession(c *gin.Context) {
+	// Extract sessionID from request (you may use query params, body, etc.)
+	//todo check with the frontend later
+	sessionID := c.Query("session_id") // Assuming sessionID is sent as a query parameter
+	if sessionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required"})
 		return
 	}
 
-	// Revoke the session using the session ID
-	err := controller.authService.RevokeSession(req.SessionID)
+	// Call the RevokeSession method from the SessionService
+	err := ac.sessionService.RevokeSession(sessionID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to revoke session"})
 		return
 	}
 
+	// Return success response
 	c.JSON(http.StatusOK, gin.H{"message": "Session revoked successfully"})
 }

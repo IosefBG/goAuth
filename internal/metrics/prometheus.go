@@ -48,7 +48,7 @@ func registerHDMetrics(reg prometheus.Registerer) {
 	reg.MustRegister(hdFailures)
 }
 
-// Middleware for tracking request duration
+// InstrumentHandler Middleware for tracking request duration
 func InstrumentHandler() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -64,7 +64,7 @@ func InstrumentHandler() gin.HandlerFunc {
 	}
 }
 
-// Handler for exposing Prometheus metrics
+// MetricsHandler Handler for exposing Prometheus metrics
 func MetricsHandler() gin.HandlerFunc {
 	h := promhttp.Handler()
 

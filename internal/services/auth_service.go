@@ -1,10 +1,11 @@
 package services
 
 import (
-	"backendGoAuth/internal/auth"
-	"backendGoAuth/internal/database"
+	"backendGoAuth/internal/entities"
 	"backendGoAuth/internal/goAuthException"
 	"backendGoAuth/internal/models"
+	"backendGoAuth/internal/repositories"
+	"backendGoAuth/internal/utils"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"strings"
@@ -12,13 +13,14 @@ import (
 
 // AuthService provides authentication-related services.
 type AuthService struct {
+	UserRepo       *repositories.UserRepository
 	SessionService *SessionService // Corrected reference
-	// Add any dependencies here
 }
 
 // NewAuthService creates a new instance of AuthService.
-func NewAuthService(sessionService *SessionService) *AuthService {
+func NewAuthService(userRepo *repositories.UserRepository, sessionService *SessionService) *AuthService {
 	return &AuthService{
+		UserRepo:       userRepo, // Initialize UserRepo here
 		SessionService: sessionService,
 	}
 }
@@ -26,7 +28,7 @@ func NewAuthService(sessionService *SessionService) *AuthService {
 // RegisterUser registers a new user with the provided details.
 func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, browser, device string) (models.AuthResponse, error) {
 	// Check if username already exists
-	exists, err := database.UserExistsByUsername(req.Username)
+	exists, err := svc.UserRepo.UserExistsByUsername(req.Username)
 	if err != nil {
 		return models.AuthResponse{}, err
 	}
@@ -35,7 +37,7 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, 
 	}
 
 	// Check if email already exists
-	existsEmail, err := database.UserExistsByEmail(req.Email)
+	existsEmail, err := svc.UserRepo.UserExistsByEmail(req.Email)
 	if err != nil {
 		return models.AuthResponse{}, err
 	}
@@ -56,7 +58,7 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, 
 	}
 
 	// Generate a JWT token for the newly registered user
-	token, err := auth.GenerateJWT(map[string]interface{}{"user_id": user.ID})
+	token, err := utils.GenerateJWT(map[string]interface{}{"user_id": user.ID})
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.TokenGenerationError)
 	}
@@ -79,16 +81,16 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, 
 // AuthenticateUser authenticates a user based on the provided credentials.
 // AuthenticateUser authenticates a user based on the provided identifier (username or email) and password.
 func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browser, device string) (models.AuthResponse, error) {
-	var user *database.User
+	var user *entities.User
 	var err error
 
 	if strings.Contains(identifier, "@") {
-		user, err = database.GetUserByEmail(identifier)
+		user, err = svc.UserRepo.GetUserByEmail(identifier)
 		if err != nil {
 			return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.NotFoundCode, goAuthException.UsernameCheckError)
 		}
 	} else {
-		user, err = database.GetUserByUsername(identifier)
+		user, err = svc.UserRepo.GetUserByUsername(identifier)
 		if err != nil {
 			return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.NotFoundCode, goAuthException.EmailCheckError)
 		}
@@ -106,7 +108,7 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browse
 	}
 
 	// Generate a JWT token with the user's ID
-	token, err := auth.GenerateJWT(map[string]interface{}{"user_id": user.ID})
+	token, err := utils.GenerateJWT(map[string]interface{}{"user_id": user.ID})
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.TokenGenerationError)
 	}
@@ -138,7 +140,7 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browse
 
 // createUser creates a new user in the database.
 func (svc *AuthService) createUser(username, password, email string) (models.UserData, error) {
-	userID, err := database.InsertUser(username, password, email)
+	userID, err := svc.UserRepo.InsertUser(username, password, email)
 	if err != nil {
 		return models.UserData{}, goAuthException.NewCustomError(goAuthException.InternalServerErrorCode, goAuthException.UserCreationError)
 	}
@@ -158,7 +160,7 @@ func hashPassword(password string) (string, error) {
 	return string(hashedPassword), nil
 }
 
-func (svc *AuthService) RevokeSession(sessionID int) error {
+func (svc *AuthService) RevokeSession(sessionID string) error {
 	// Call the relevant method to revoke the session in your service layer
 	err := svc.SessionService.RevokeSession(sessionID)
 	if err != nil {

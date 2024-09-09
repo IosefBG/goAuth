@@ -1,5 +1,3 @@
--- 001_create_users_table.up.sql
-
 -- Create the users table
 CREATE TABLE users
 (
@@ -11,6 +9,7 @@ CREATE TABLE users
     login_attempts INT       DEFAULT 0,
     last_login     TIMESTAMP,
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active     BOOLEAN   DEFAULT true
 );
 
