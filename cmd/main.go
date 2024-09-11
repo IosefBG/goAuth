@@ -1,14 +1,13 @@
-// main.go
-
 package main
 
 import (
 	"backendGoAuth/internal/controllers"
 	"backendGoAuth/internal/database"
-	prometheusmetrics "backendGoAuth/internal/metrics"
+	"backendGoAuth/internal/metrics"
 	"backendGoAuth/internal/middlewares"
 	"backendGoAuth/internal/repositories"
 	"backendGoAuth/internal/services"
+	"backendGoAuth/internal/utils"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -40,7 +39,7 @@ func main() {
 	reg := prometheus.NewRegistry()
 
 	// Register Prometheus metrics
-	prometheusmetrics.RegisterMetrics(reg)
+	metrics.RegisterMetrics(reg)
 
 	// Create Gin router
 	router := setupRouter()
@@ -53,32 +52,34 @@ func main() {
 func setupRouter() *gin.Engine {
 	router := gin.Default()
 
-	config := cors.DefaultConfig()
-	config.AllowAllOrigins = true
-	config.AllowMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-	config.AllowHeaders = []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Browser", "X-Device"} // Include Authorization header
-	// Enable CORS for all origins, methods, and headers
+	config := cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Browser", "X-Device"},
+		AllowCredentials: true,
+	}
+
 	router.Use(cors.New(config))
 
 	// Apply middleware to track request duration
-	router.Use(prometheusmetrics.InstrumentHandler())
-
-	// Setup JWT middleware
-	router.Use(middlewares.SetupJWTMiddleware(os.Getenv("JWT_SECRET")))
+	router.Use(metrics.InstrumentHandler())
 
 	// Get the database instance
 	db := database.GetDB()
 
-	// Instantiate AuthService
-	sessionRepo := repositories.NewSessionRepository(db) // Corrected to use pointer
+	// Instantiate repositories and services
+	sessionRepo := repositories.NewSessionRepository(db)
 	sessionService := services.NewSessionService(sessionRepo)
-	userRepo := repositories.NewUserRepository(db) // Initialize UserRepo
+	userRepo := repositories.NewUserRepository(db)
 	authService := services.NewAuthService(userRepo, sessionService)
 
-	// Instantiate middleware with session service
-	sessionMiddleware := middlewares.NewSessionMiddleware(sessionService)
+	// Initialize the session service in the utils package
+	utils.SetSessionService(sessionRepo)
 
-	// Instantiate AuthController with AuthService
+	// Initialize JWT middleware with the secret and JWT service
+	jwtMiddleware := middlewares.NewJWTMiddleware(os.Getenv("JWT_SECRET"))
+
+	// Instantiate controllers
 	authController := controllers.NewAuthController(authService, sessionService)
 	adminController := controllers.NewAdminController(userRepo)
 
@@ -88,7 +89,7 @@ func setupRouter() *gin.Engine {
 		api.POST("/login", authController.Login)
 		api.POST("/register", authController.Register)
 
-		authGroup := api.Group("/auth", sessionMiddleware.UpdateSessionMiddleware())
+		authGroup := api.Group("/auth", jwtMiddleware.MiddlewareFunc()) // Apply JWT middleware here
 		{
 			authGroup.POST("/logout", authController.RevokeCurrentSession)
 			authGroup.POST("/revokeSession", authController.RevokeSession)
@@ -96,14 +97,14 @@ func setupRouter() *gin.Engine {
 			authGroup.GET("/secure", authController.SecureEndpoint)
 		}
 
-		adminGroup := api.Group("/admin", sessionMiddleware.UpdateSessionMiddleware())
+		adminGroup := api.Group("/admin", jwtMiddleware.MiddlewareFunc()) // Apply JWT middleware here
 		{
 			adminGroup.GET("/users", adminController.GetAllUsers)
 		}
 	}
 
 	// Register Prometheus metrics endpoint
-	router.GET("/metrics", prometheusmetrics.MetricsHandler())
+	router.GET("/metrics", metrics.MetricsHandler())
 
 	return router
 }
@@ -111,6 +112,9 @@ func setupRouter() *gin.Engine {
 // startServer starts the HTTP server
 func startServer(router *gin.Engine) {
 	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080" // Default port if not specified
+	}
 	fmt.Printf("Server is running on port %s...\n", port)
 	if err := router.Run(":" + port); err != nil {
 		log.Println("Error starting the server:", err)

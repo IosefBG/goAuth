@@ -53,6 +53,9 @@ func ConnectDB() error {
 }
 
 func GetDB() *sql.DB {
+	if db == nil {
+		log.Fatalf("Database connection is not initialized")
+	}
 	return db
 }
 

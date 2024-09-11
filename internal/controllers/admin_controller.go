@@ -1,5 +1,7 @@
 package controllers
 
+//AdminController
+
 import (
 	"backendGoAuth/internal/entities"
 	"backendGoAuth/internal/services"

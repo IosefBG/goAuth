@@ -29,29 +29,33 @@ func getLocationFromIPAddress(ipAddress string) (string, error) {
 	return "Location", nil // Placeholder
 }
 
-func (s *SessionService) InsertSession(userID int, token, ipAddress, browser, device string) (int, error) {
+func (s *SessionService) InsertSession(userID int, ipAddress, browser, device string) (*entities.Session, error) {
 	now := time.Now()
 	location, err := getLocationFromIPAddress(ipAddress)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	session := entities.Session{
 		UserID:          userID,
-		Token:           token,
 		IPAddress:       ipAddress,
 		Location:        location,
 		CreatedAt:       now,
 		UpdatedAt:       now,
 		DeviceConnected: device,
 		BrowserUsed:     browser,
+		IsActive:        true,
 	}
 
+	// Insert the session and get the session ID
 	sessionID, err := s.SessionRepo.InsertSession(session)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return sessionID, nil
+
+	// Retrieve the full session with the generated ID
+	session.ID = sessionID
+	return &session, nil
 }
 
 func (s *SessionService) GetActiveSessions(userID int) ([]models.SessionResponse, error) {
@@ -72,14 +76,13 @@ func (s *SessionService) GetActiveSessions(userID int) ([]models.SessionResponse
 		var session entities.Session
 		if err := rows.Scan(
 			&session.ID,
-			&session.Token,
 			&session.IPAddress,
 			&session.CreatedAt,
 			&session.UpdatedAt,
 			&session.Location,
 			&session.DeviceConnected,
 			&session.BrowserUsed,
-			&session.IsActive, // Ensure you have this field if you want to include it
+			&session.IsActive, // Ensure this is included as it is in the SELECT statement
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan session row: %w", err)
 		}
@@ -87,7 +90,6 @@ func (s *SessionService) GetActiveSessions(userID int) ([]models.SessionResponse
 		sessionResponse := models.SessionResponse{
 			ID:              session.ID,
 			UserID:          session.UserID,
-			Token:           session.Token,
 			IPAddress:       session.IPAddress,
 			IsActive:        session.IsActive,
 			CreatedAt:       session.CreatedAt,
@@ -107,8 +109,13 @@ func (s *SessionService) GetActiveSessions(userID int) ([]models.SessionResponse
 	return sessionResponses, nil
 }
 
-func (s *SessionService) RevokeCurrentSessionToken(token string) error {
-	return s.SessionRepo.RevokeCurrentSession(token)
+func (s *SessionService) RevokeCurrentSessionToken(tokenString string) error {
+	claims, err := utils.ValidateToken(tokenString)
+	if err != nil {
+		return err
+	}
+
+	return s.SessionRepo.RevokeCurrentSession(int(claims["session_id"].(float64)))
 }
 
 func (s *SessionService) RevokeSession(sessionID string) error {
@@ -130,11 +137,6 @@ func (s *SessionService) UpdateSessionUpdatedAt(userID int) error {
 	return nil
 }
 
-func (svc *SessionService) CheckSession(tokenString string) (bool, error) {
-	// Call the CheckSession method from SessionRepository
-	return svc.SessionRepo.CheckSession(tokenString)
-}
-
 func (svc *SessionService) GetUserIDFromTokenOrSource(c *gin.Context) (int, error) {
 	// Extract the JWT token from the request headers
 	tokenString, err := utils.ExtractToken(c)
@@ -142,19 +144,19 @@ func (svc *SessionService) GetUserIDFromTokenOrSource(c *gin.Context) (int, erro
 		return 0, err
 	}
 
+	// Validate the token and retrieve the claims
+	claims, err := utils.ValidateToken(tokenString)
+	if err != nil {
+		return 0, err
+	}
+
 	// Check the session using the CheckSession method
-	sessionValid, err := svc.CheckSession(tokenString)
+	sessionValid, err := svc.SessionRepo.CheckSession(int(claims["session_id"].(float64)))
 	if err != nil {
 		return 0, err
 	}
 	if !sessionValid {
 		return 0, errors.New("session is invalid or expired")
-	}
-
-	// Validate the token and retrieve the claims
-	claims, err := utils.ValidateToken(tokenString, []byte(utils.JwtSecret))
-	if err != nil {
-		return 0, err
 	}
 
 	// Extract the user ID from the claims
@@ -164,4 +166,20 @@ func (svc *SessionService) GetUserIDFromTokenOrSource(c *gin.Context) (int, erro
 	}
 
 	return int(userIDFloat64), nil
+}
+
+func (svc *SessionService) GetSessionByID(sessionID int) (*entities.Session, error) {
+	// Fetch the session by ID using the repository
+	session, err := svc.SessionRepo.GetSessionByID(sessionID)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching session: %v", err)
+	}
+
+	if session == nil {
+		// Return an error if the session is not found
+		return nil, errors.New("session not found")
+	}
+
+	// Return the session if found
+	return session, nil
 }
