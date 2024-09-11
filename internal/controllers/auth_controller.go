@@ -1,5 +1,7 @@
 package controllers
 
+//AuthController
+
 import (
 	"backendGoAuth/internal/models"
 	"backendGoAuth/internal/services"
@@ -59,7 +61,7 @@ func (controller *AuthController) Login(c *gin.Context) {
 	}
 
 	ipAddress := c.ClientIP()
-	authResponse, err := controller.authService.AuthenticateUser(req.Identifier, req.Password, ipAddress, browser, device)
+	authResponse, err := controller.authService.AuthenticateUser(req.Identifier, req.Password, ipAddress, browser, device, c)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials", "message": err.Error()})
 		return

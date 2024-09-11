@@ -20,15 +20,12 @@ type UserData struct {
 }
 
 type AuthResponse struct {
-	Token   string          `json:"token"`
-	User    UserData        `json:"user"`
-	Session SessionResponse `json:"session"`
+	User UserData `json:"user"`
 }
 
 type SessionResponse struct {
 	ID              int       `json:"id"`
 	UserID          int       `json:"user_id"`
-	Token           string    `json:"session_token"`
 	IPAddress       string    `json:"ip_address"`
 	IsActive        bool      `json:"is_active"`
 	CreatedAt       time.Time `json:"created_date_at"`

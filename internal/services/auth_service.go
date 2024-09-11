@@ -1,3 +1,4 @@
+// Package services AuthService
 package services
 
 import (
@@ -6,6 +7,7 @@ import (
 	"backendGoAuth/internal/models"
 	"backendGoAuth/internal/repositories"
 	"backendGoAuth/internal/utils"
+	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"strings"
@@ -57,30 +59,26 @@ func (svc *AuthService) RegisterUser(req models.RegistrationRequest, ipAddress, 
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.UserCreationError)
 	}
 
-	// Generate a JWT token for the newly registered user
-	token, err := utils.GenerateJWT(map[string]interface{}{"user_id": user.ID})
-	if err != nil {
-		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.TokenGenerationError)
-	}
-
 	// Insert session into the database
-	sessionID, err := svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
+	session, err := svc.SessionService.InsertSession(user.ID, ipAddress, browser, device)
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.SessionInsertionError)
 	}
 
+	// Generate JWT with session ID included in the claims
+	//todo also here should set cookie
+	_, err = utils.GenerateJWT(map[string]interface{}{
+		"user_id":    user.ID,
+		"session_id": session.ID, // Include session ID in the token claims
+	}, "access", session.ID)
+
 	return models.AuthResponse{
-		Token: token,
-		User:  user,
-		Session: models.SessionResponse{
-			ID: sessionID,
-		},
+		User: user,
 	}, nil
 }
 
 // AuthenticateUser authenticates a user based on the provided credentials.
-// AuthenticateUser authenticates a user based on the provided identifier (username or email) and password.
-func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browser, device string) (models.AuthResponse, error) {
+func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browser, device string, c *gin.Context) (models.AuthResponse, error) {
 	var user *entities.User
 	var err error
 
@@ -107,36 +105,41 @@ func (svc *AuthService) AuthenticateUser(identifier, password, ipAddress, browse
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.UnauthorizedCode, "Invalid credentials")
 	}
 
-	// Generate a JWT token with the user's ID
-	token, err := utils.GenerateJWT(map[string]interface{}{"user_id": user.ID})
-	if err != nil {
-		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.TokenGenerationError)
-	}
-
-	// Insert session into the database
-	sessionID, err := svc.SessionService.InsertSession(user.ID, token, ipAddress, browser, device)
+	session, err := svc.SessionService.InsertSession(user.ID, ipAddress, browser, device)
 	if err != nil {
 		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.InternalServerErrorCode, goAuthException.SessionInsertionError)
 	}
 
+	// Generate short-lived JWT token with the user's ID
+	accessToken, err := utils.GenerateJWT(map[string]interface{}{
+		"user_id":    user.ID,
+		"session_id": session.ID, // Include session ID in the token claims
+	}, "access", session.ID)
+	if err != nil {
+		return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.TokenGenerationError)
+	}
+
+	// Store session in the database with the refresh token, if applicable
+	//refreshToken, err := utils.GenerateJWT(map[string]interface{}{
+	//	"user_id":    user.ID,
+	//	"session_id": session.ID, // Include session ID in the token claims
+	//}, "refresh", session.ID)
+	//if err != nil {
+	//	return models.AuthResponse{}, goAuthException.NewCustomError(goAuthException.Teapot, goAuthException.TokenGenerationError)
+	//}
+
 	authResponse := models.AuthResponse{
-		Token: token,
 		User: models.UserData{
 			ID:       user.ID,
 			Username: user.Username,
 			Email:    user.Email,
 		},
-		Session: models.SessionResponse{
-			ID: sessionID,
-		},
 	}
+
+	utils.SetJWTTokenCookies(c, accessToken)
 
 	return authResponse, nil
 }
-
-//func (svc *AuthService) GetActiveSessions(userID int) ([]database.Session, error) {
-//	return database.GetActiveSessions(userID)
-//}
 
 // createUser creates a new user in the database.
 func (svc *AuthService) createUser(username, password, email string) (models.UserData, error) {
